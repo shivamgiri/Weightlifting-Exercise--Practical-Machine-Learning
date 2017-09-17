@@ -1,0 +1,100 @@
+---
+title: 'Practical Machine Learning: Weightlifting Prediction Exercise'
+author: "Shivam Giri"
+date: "September 17, 2017"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+##Overview
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively.In this project, Our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and to predict the manner in which they did the exercise. More information is available from the website (http://groupware.les.inf.puc-rio.br/har)
+
+##Loading the Data
+```{r setup, }
+train_raw<-read.csv("F:/Downloads/pml-training.csv",header = TRUE)
+validation<-read.csv("F:/Downloads/pml-testing.csv",header = TRUE)
+
+```
+
+##Cleaning the Data
+```{r}
+#Some coloumn contains NAs in excess
+maxNA_perc<-20
+maxNA_count<-nrow(train_raw)/100*maxNA_perc
+
+#Insignificant Columns(NAs) & time series columns
+insig_column<-which(colSums(is.na(train_raw)|train_raw=="")>maxNA_count)
+ts_col<-grep("timestamp",names(train_raw))
+
+#Removing Time series Columns and insignificant columns
+train_cleaned<-train_raw[,-c(1,ts_col,insig_column)]
+validation_cleaned<-validation[,-c(1,ts_col,insig_column)]
+```
+
+##Data Slicing
+```{r}
+library(caret)
+library(ggplot2)
+library(lattice)
+set.seed(2334)
+inTrain<-createDataPartition(train_cleaned$classe,p=.7,list = FALSE)
+training<-train_cleaned[inTrain,]
+testing<-train_cleaned[-inTrain,]
+```
+
+##Exploratory data analysis
+```{r,results='hide'}
+dim(training)
+dim(testing)
+str(training)
+str(testing)
+```
+
+##Model Selection
+For this project I'll use 3 differnt model algorithms and then look to see which provides the best out-of-sample accuracty. The three model types I'm going to test are:
+
+1)Decision trees with CART (rpart)
+2)Stochastic gradient boosting trees (gbm)
+3)Random forest decision trees (rf)
+
+```{r}
+library(survival)
+model_rpart<-train(classe~.,data = training,method="rpart")
+model_gbm<-train(classe~.,data = training,method="gbm",verbose=FALSE)
+model_rf<-train(classe~.,data = training,method="rf")
+```
+
+### CART(rpart) model
+```{r}
+library(rattle)
+fancyRpartPlot(model_rpart$finalModel)
+```
+
+##Model Assessment
+```{r}
+#Predictions on testing dataset
+pred_rpart<-predict(model_rpart,newdata = testing)
+pred_gbm<-predict(model_gbm,newdata = testing)
+pred_rf<-predict(model_rf,newdata = testing)
+
+#Confusion matrix(Accuracy) of different models
+cm_rpart<-confusionMatrix(testing$classe,pred_rpart)$overall
+cm_gbm<-confusionMatrix(testing$classe,pred_gbm)$overall
+cm_rf<-confusionMatrix(testing$classe,pred_rf)$overall
+data.frame(Model=c("Cart","gbm","rf"),Accuracy=c(cm_rpart[1],cm_gbm[1],cm_rf[1]))
+```
+
+The next step should be to create an ensemble model, but given the very high accuracy of 'rf models, we will adopt 'rf' model as the final model.
+
+#Prediction
+Performing prediction on validation dataset as the final step to evaluate the model
+```{r}
+pred_valid<-predict(model_rf,newdata = validation_cleaned)
+final_pred<-data.frame("Problem_id"=validation_cleaned$problem_id,"Predicted Value"=pred_valid)
+print(final_pred)
+
+```
+
+##Conclusion
+The random forest model with cross-validation produces a surprisingly accurate model with 99.83% accuracy that is sufficient for predictive analytics.
